@@ -44,6 +44,14 @@ class TestCausalAnalysis(unittest.TestCase):
                 coh_point_est = np.array(coh_dict[_CausalInsightsConstants.PointEstimateKey])
                 loc_point_est = np.array(loc_dict[_CausalInsightsConstants.PointEstimateKey])
 
+                ca._policy_tree_string(X, 1)
+                ca._heterogeneity_tree_string(X, 1)
+                ca._heterogeneity_tree_string(X, 3)
+
+                # Can't handle multi-dimensional treatments
+                with self.assertRaises(AssertionError):
+                    ca._policy_tree_string(X, 3)
+
                 # global shape is (d_y, sum(d_t))
                 assert glo_point_est.shape == coh_point_est.shape == (1, 5)
                 assert loc_point_est.shape == (2,) + glo_point_est.shape
@@ -59,6 +67,8 @@ class TestCausalAnalysis(unittest.TestCase):
                     inf = ca.whatif(X[:2], np.ones(shape=(2,)), 2, y[:2])
                     assert np.shape(inf.point_estimate) == np.shape(y[:2])
                     inf.summary_frame()
+
+                    ca._whatif_dict(X[:2], np.ones(shape=(2,)), 1, y[:2])
 
                 # features; for categoricals they should appear #cats-1 times each
                 fts = ['x0', 'x1', 'x2', 'x3', 'x3']
@@ -123,6 +133,14 @@ class TestCausalAnalysis(unittest.TestCase):
                 assert glo_point_est.shape == coh_point_est.shape == (1, 5)
                 assert loc_point_est.shape == (2,) + glo_point_est.shape
 
+                ca._policy_tree_string(X, inds[1])
+                ca._heterogeneity_tree_string(X, inds[1])
+                ca._heterogeneity_tree_string(X, inds[3])
+
+                # Can't handle multi-dimensional treatments
+                with self.assertRaises(AssertionError):
+                    ca._policy_tree_string(X, inds[3])
+
                 if not classification:
                     # ExitStack can be used as a "do nothing" ContextManager
                     cm = ExitStack()
@@ -136,6 +154,8 @@ class TestCausalAnalysis(unittest.TestCase):
                     assert np.shape(inf.point_estimate) == np.shape(y[:2])
                     inf.summary_frame()
 
+                    ca._whatif_dict(X[:2], np.ones(shape=(2,)), inds[1], y[:2])
+
             badargs = [
                 (n_inds, n_cats, [4]),  # hinds out of range
                 (n_inds, n_cats, ["test"])  # hinds out of range
@@ -145,3 +165,48 @@ class TestCausalAnalysis(unittest.TestCase):
                 with self.assertRaises(Exception):
                     ca = CausalAnalysis(*args)
                     ca.fit(X, y)
+
+    def test_final_models(self):
+        d_y = (1,)
+        y = np.random.choice([0, 1], size=(500,) + d_y)
+        X = np.hstack((np.random.normal(size=(500, 2)),
+                       np.random.choice([0, 1], size=(500, 1)),
+                       np.random.choice([0, 1, 2], size=(500, 1))))
+        inds = [0, 1, 2, 3]
+        cats = [2, 3]
+        hinds = [0, 3]
+        for h_model in ['linear', 'forest']:
+            for classification in [False, True]:
+                ca = CausalAnalysis(inds, cats, hinds, classification=classification, heterogeneity_model=h_model)
+                ca.fit(X, y)
+                glo = ca.global_causal_effect()
+                coh = ca.cohort_causal_effect(X[:2])
+                loc = ca.local_causal_effect(X[:2])
+                glo_dict = ca._global_causal_effect_dict()
+                coh_dict = ca._cohort_causal_effect_dict(X[:2])
+                loc_dict = ca._local_causal_effect_dict(X[:2])
+
+                ca._policy_tree_string(X, 1)
+                ca._heterogeneity_tree_string(X, 1)
+                ca._heterogeneity_tree_string(X, 3)
+
+                # Can't handle multi-dimensional treatments
+                with self.assertRaises(AssertionError):
+                    ca._policy_tree_string(X, 3)
+
+                if not classification:
+                    # ExitStack can be used as a "do nothing" ContextManager
+                    cm = ExitStack()
+                else:
+                    cm = self.assertRaises(Exception)
+                with cm:
+                    inf = ca.whatif(X[:2], np.ones(shape=(2,)), 1, y[:2])
+                    inf.summary_frame()
+                    inf = ca.whatif(X[:2], np.ones(shape=(2,)), 2, y[:2])
+                    inf.summary_frame()
+
+                    ca._whatif_dict(X[:2], np.ones(shape=(2,)), 1, y[:2])
+
+        with self.assertRaises(AssertionError):
+            ca = CausalAnalysis(inds, cats, hinds, classification=classification, heterogeneity_model='other')
+            ca.fit(X, y)
